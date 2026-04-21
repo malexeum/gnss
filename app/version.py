@@ -1,0 +1,6 @@
+APP_NAME = "GNSS Processing GUI"
+APP_EXE_NAME = "GNSS_GUI"
+APP_VERSION = "3.5.6"
+COMPANY_NAME = "Makushin Alexey"
+GITHUB_REPO = "https://github.com/malexeum?tab=repositories"
+GITHUB_LATEST_JSON_URL = "https://raw.githubusercontent.com/malexeum/gnss-apps/refs/heads/main/latest.json"

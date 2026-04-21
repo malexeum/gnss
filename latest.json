@@ -1,0 +1,7 @@
+{
+  "version": "3.5.6",
+  "zip_url": "https://github.com/your-org/your-repo/releases/download/v3.5.6/GNSS_GUI_3.5.6_win64.zip",
+  "exe_url": "https://github.com/your-org/your-repo/releases/download/v3.5.6/GNSS_GUI.exe",
+  "notes": "Первый релиз Windows onedir с автообновлением через GitHub.",
+  "published_at": "2026-04-18T10:00:00Z"
+}

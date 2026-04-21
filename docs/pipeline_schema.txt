@@ -1,0 +1,54 @@
+Спецификация пайплайна GNSS CSV
+
+1. Базовый стандарт
+- utc_time : UTC-время, формат YYYY-MM-DD HH:MM:SS
+- height   : очищенный базовый ряд высоты, м
+- qc_flag  : 0/1, опционально после OutlierDetector
+
+2. Имена файлов
+- <dataset>_clean.csv
+- <dataset>_clean_bw_<period>min.csv
+- <dataset>_clean_bw_<period>min_med_w<window>_t<threshold>mm.csv
+
+3. Колонки по этапам
+3.1 После OutlierDetector
+- utc_time
+- height
+- qc_flag
+
+3.2 После Butterworth
+- utc_time
+- height
+- qc_flag
+- height_bw
+- residual_bw_mm
+
+3.3 После Median filter
+- utc_time
+- height
+- qc_flag
+- height_bw
+- residual_bw_mm
+- height_med
+- residual_med_mm
+- is_median_outlier
+- median_local
+
+4. Правила residual
+- residual_bw_mm  = (height - height_bw) * 1000
+- residual_med_mm = (height_bw - height_med) * 1000
+
+5. Визуализация
+plot_manager.py ожидает стандартные поля:
+- utc_time
+- height
+- height_bw
+- height_med
+- residual_bw_mm
+- residual_med_mm
+
+6. Назначение полей
+- height      : ряд после удаления выбросов
+- height_bw   : ряд после фильтра Баттерворта
+- height_med  : ряд после медианного фильтра
+- residual_*  : вклад конкретного этапа обработки в мм

@@ -1,0 +1,38 @@
+project_root/
+│
+├─ app/
+│  ├─ gui/
+│  │  └─ gnss_gui_v3_3.py
+│  ├─ core/
+│  │  ├─ master_pipeline.py
+│  │  ├─ data_importer.py
+│  │  ├─ time_validator.py
+│  │  ├─ outlier_detector.py
+│  │  ├─ butterworth_filter.py
+│  │  ├─ median_filter.py
+│  │  ├─ data_exporter.py
+│  │  └─ processing_log.py
+│  ├─ plotting/
+│  │  └─ plot_manager.py
+│  └─ utils/
+│
+├─ data/
+│  ├─ input/
+│  ├─ output/
+│  │  ├─ clean/
+│  │  ├─ butterworth/
+│  │  ├─ median/
+│  │  ├─ flags/
+│  │  ├─ export/
+│  │  ├─ logs/
+│  │  └─ temp/
+│  └─ schemas/
+│
+├─ docs/
+│  ├─ tz_v0.2.md
+│  └─ architecture_v0.2.md
+│
+├─ tests/
+├─ config/
+│  └─ settings.json
+└─ run_gui.py
