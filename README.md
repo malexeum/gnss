@@ -87,5 +87,14 @@ docs/         # документация
 packaging/    # spec, скрипты сборки, launcher
 releases/     # локальные архивы релизов
 ```
-by Makushin Alexey
-mav@ifz.run_gnss_gui
+
+## Документация
+
+- [Инструкция пользователя](docs/Инструкция_GNSS_GUI.md)
+
+## Контакты
+
+Автор: Makushin Alexey  
+GitHub: https://github.com/malexeum  
+По вопросам и предложениям: через Issues в этом репозитории.
+mail: mav(@)ifz.ru
