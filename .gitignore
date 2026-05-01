@@ -32,3 +32,8 @@ releases/
 
 # Generated outputs
 data/output/
+
+tests/
+__pycache__/
+*.pyc
+docs/tmp/
