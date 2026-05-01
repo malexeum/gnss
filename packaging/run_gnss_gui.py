@@ -12,7 +12,7 @@ if str(GUI_DIR) not in sys.path:
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
 
-from gnss_gui_v3_5_6 import main
+from gnss_gui_v3_5_8 import main
 
 if __name__ == "__main__":
     main()
