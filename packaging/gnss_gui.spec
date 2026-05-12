@@ -44,7 +44,7 @@ datas += add_dir_if_exists(data_dir / 'input', 'data/input')
 datas += add_dir_if_exists(data_dir / 'output', 'data/output')
 
 a = Analysis(
-    ['../app/gui/gnss_gui_v3_5_8.py'],
+    ['../app/gui/gnss_gui_v3_5_9.py'],
     pathex=[str(project_root), str(gui_dir), str(core_dir)],
     binaries=[],
     datas=datas,
