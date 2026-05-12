@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QDateTime
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFileDialog, QMessageBox,
-    QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton,
+    QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QPushButton,
     QLineEdit, QTextEdit, QDoubleSpinBox, QSpinBox, QSplitter,
     QGroupBox, QCheckBox, QComboBox, QDateTimeEdit, QSizePolicy,
 )
@@ -16,6 +16,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
+from scipy.interpolate import interp1d
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE_DIR = ROOT / "app" / "core"
@@ -48,8 +49,8 @@ class MplCanvas(FigureCanvas):
 
 
 class GNSSMainWindow(QMainWindow):
-    APP_VERSION = "3.5.8"
-    LOG_VERSION = "0.3.5.8"
+    APP_VERSION = "3.5.9"
+    LOG_VERSION = "0.3.5.9"
 
     def __init__(self):
         super().__init__()
@@ -71,6 +72,11 @@ class GNSSMainWindow(QMainWindow):
         self.df_flagged = None
         self.df_bw = None
         self.df_med = None
+        self.df_second = None
+        self.second_file = None
+        self.second_time_col = None
+        self.second_height_col = None
+        self.compare_result = None
 
         self.time_col = None
         self.height_col = None
@@ -126,30 +132,56 @@ class GNSSMainWindow(QMainWindow):
 
         self.time_col_edit = QLineEdit()
         self.height_col_edit = QLineEdit()
+        btn_load_primary = QPushButton("Загрузить")
+        btn_load_primary.setFixedWidth(110)
+        btn_load_primary.setFixedHeight(56)
+        btn_load_primary.clicked.connect(self.load_file)
 
-        import_form = QFormLayout()
-        import_form.setVerticalSpacing(10)
-        import_form.addRow("Колонка времени:", self.time_col_edit)
-        import_form.addRow("Колонка высоты:", self.height_col_edit)
+        import_grid_primary = QGridLayout()
+        import_grid_primary.setHorizontalSpacing(8)
+        import_grid_primary.setVerticalSpacing(10)
+        import_grid_primary.addWidget(QLabel("Колонка времени:"), 0, 0)
+        import_grid_primary.addWidget(self.time_col_edit, 0, 1)
+        import_grid_primary.addWidget(QLabel("Колонка высоты:"), 1, 0)
+        import_grid_primary.addWidget(self.height_col_edit, 1, 1)
+        import_grid_primary.addWidget(btn_load_primary, 0, 2, 2, 1)
 
         import_layout.addLayout(file_row)
-        import_layout.addLayout(import_form)
+        import_layout.addLayout(import_grid_primary)
 
-        settings_row = QHBoxLayout()
-        settings_row.setSpacing(8)
+        second_file_row = QHBoxLayout()
+        self.second_file_edit = QLineEdit()
+        self.second_file_edit.setPlaceholderText("Выберите 2-й файл CSV/TXT/TSV/XLS/XLSX/POS")
+        btn_browse_second = QPushButton("Обзор 2...")
+        btn_browse_second.clicked.connect(self.choose_second_file)
+        second_file_row.addWidget(self.second_file_edit)
+        second_file_row.addWidget(btn_browse_second)
 
-        btn_import_settings = QPushButton("Импорт настроек")
-        btn_import_settings.clicked.connect(self.import_filter_params)
+        self.second_time_col_edit = QLineEdit()
+        self.second_height_col_edit = QLineEdit()
+        btn_load_second_local = QPushButton("Загрузить")
+        btn_load_second_local.setFixedWidth(110)
+        btn_load_second_local.setFixedHeight(56)
+        btn_load_second_local.clicked.connect(self.load_second_file)
 
-        btn_export_settings = QPushButton("Экспорт настроек")
-        btn_export_settings.clicked.connect(self.export_filter_params)
+        import_grid_second = QGridLayout()
+        import_grid_second.setHorizontalSpacing(8)
+        import_grid_second.setVerticalSpacing(10)
+        import_grid_second.addWidget(QLabel("Колонка времени 2:"), 0, 0)
+        import_grid_second.addWidget(self.second_time_col_edit, 0, 1)
+        import_grid_second.addWidget(QLabel("Колонка высоты 2:"), 1, 0)
+        import_grid_second.addWidget(self.second_height_col_edit, 1, 1)
+        import_grid_second.addWidget(btn_load_second_local, 0, 2, 2, 1)
 
-        settings_row.addWidget(btn_import_settings)
-        settings_row.addWidget(btn_export_settings)
-        import_layout.addLayout(settings_row)
+        import_layout.addLayout(second_file_row)
+        import_layout.addLayout(import_grid_second)
 
-        clean_group = QGroupBox("Очистка выбросов и пропусков")
-        clean_form = QFormLayout(clean_group)
+        clean_group = QGroupBox("Настройки фильтров")
+        clean_layout = QVBoxLayout(clean_group)
+        clean_layout.setSpacing(10)
+
+        outlier_group = QGroupBox("Очистка выбросов и пропусков")
+        clean_form = QFormLayout(outlier_group)
         clean_form.setVerticalSpacing(10)
 
         self.k_sigma_spin = QDoubleSpinBox()
@@ -214,10 +246,26 @@ class GNSSMainWindow(QMainWindow):
         median_form.addRow("Порог, мм:", self.threshold_mm_spin)
         median_form.addRow("", self.cb_median_live)
 
+        settings_row = QHBoxLayout()
+        settings_row.setSpacing(8)
+
+        btn_import_settings = QPushButton("Импорт настроек")
+        btn_import_settings.clicked.connect(self.import_filter_params)
+
+        btn_export_settings = QPushButton("Экспорт настроек")
+        btn_export_settings.clicked.connect(self.export_filter_params)
+
+        settings_row.addWidget(btn_import_settings)
+        settings_row.addWidget(btn_export_settings)
+
+        clean_layout.addWidget(outlier_group)
+        clean_layout.addWidget(butter_group)
+        clean_layout.addWidget(median_group)
+        clean_layout.addStretch(1)
+        clean_layout.addLayout(settings_row)
+
         left_layout.addWidget(import_group)
         left_layout.addWidget(clean_group)
-        left_layout.addWidget(butter_group)
-        left_layout.addWidget(median_group)
         left_layout.addStretch(1)
 
         center_widget = QWidget()
@@ -231,9 +279,6 @@ class GNSSMainWindow(QMainWindow):
         actions_layout = QHBoxLayout(actions_group)
         actions_layout.setSpacing(8)
 
-        btn_load = QPushButton("Загрузить")
-        btn_load.clicked.connect(self.load_file)
-
         btn_validate = QPushButton("Проверить время")
         btn_validate.clicked.connect(self.validate_time)
 
@@ -246,7 +291,7 @@ class GNSSMainWindow(QMainWindow):
         btn_med = QPushButton("Медианный фильтр")
         btn_med.clicked.connect(self.run_median)
 
-        for btn in [btn_load, btn_validate, btn_outlier, btn_bw, btn_med]:
+        for btn in [btn_validate, btn_outlier, btn_bw, btn_med]:
             actions_layout.addWidget(btn)
         actions_layout.addStretch(1)
 
@@ -295,10 +340,12 @@ class GNSSMainWindow(QMainWindow):
         self.cb_clean = QCheckBox("После очистки")
         self.cb_bw = QCheckBox("Баттерворт")
         self.cb_med = QCheckBox("Медианный")
+        self.cb_second = QCheckBox("2-й ряд")
 
         self.cb_raw.setChecked(True)
+        self.cb_second.setChecked(True)
 
-        for cb in [self.cb_raw, self.cb_valid, self.cb_clean, self.cb_bw, self.cb_med]:
+        for cb in [self.cb_raw, self.cb_valid, self.cb_clean, self.cb_bw, self.cb_med, self.cb_second]:
             cb.stateChanged.connect(self.plot_layers)
             row1.addWidget(cb)
 
@@ -373,11 +420,41 @@ class GNSSMainWindow(QMainWindow):
 
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
-        right_layout.addWidget(QLabel("Подробный журнал"))
+        right_layout.setSpacing(8)
+        right_layout.setContentsMargins(0, 0, 0, 0)
 
+        compare_group = QGroupBox("Сравнение")
+        compare_layout = QVBoxLayout(compare_group)
+        compare_layout.setSpacing(6)
+
+        btn_compare = QPushButton("⇆ Сравнить ряд 1 со 2-м")
+        btn_compare.setFixedHeight(32)
+        btn_compare.setStyleSheet(
+            "QPushButton { "
+            "background-color: #f0ecfa; color: #2a1a5e; font-weight: 700; "
+            "border-radius: 6px; padding: 4px 10px; border: 1px solid #c3b5ec; } "
+            "QPushButton:hover { background-color: #e3daf8; } "
+            "QPushButton:pressed { background-color: #d6c7f2; }"
+        )
+        btn_compare.clicked.connect(self.compare_series)
+        compare_layout.addWidget(btn_compare)
+
+        compare_layout.addWidget(QLabel("Результат сравнения"))
+        self.compare_stats_text = QTextEdit()
+        self.compare_stats_text.setReadOnly(True)
+        self.compare_stats_text.setMaximumHeight(180)
+        self.compare_stats_text.setPlaceholderText("Результат сравнения рядов появится здесь после нажатия ⇆ Сравнить")
+        self.compare_stats_text.setStyleSheet(
+            "QTextEdit { background: #f0ecfa; border: 1px solid #b09fd4; "
+            "border-radius: 5px; font-family: monospace; font-size: 11px; color: #2a1a5e; }"
+        )
+        compare_layout.addWidget(self.compare_stats_text)
+
+        right_layout.addWidget(compare_group, 0)
+        right_layout.addWidget(QLabel("Подробный журнал"))
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        right_layout.addWidget(self.log_text)
+        right_layout.addWidget(self.log_text, 1)
 
         splitter.addWidget(left_widget)
         splitter.addWidget(center_widget)
@@ -506,6 +583,7 @@ class GNSSMainWindow(QMainWindow):
         self.df_flagged = None
         self.df_bw = None
         self.df_med = None
+        self.compare_result = None
 
         self.log_model.clear()
         self.log_model.version = self.LOG_VERSION
@@ -514,6 +592,89 @@ class GNSSMainWindow(QMainWindow):
         self._set_status("Выбран файл. Готово к импорту.", "info")
         if self.current_stage_label:
             self.current_stage_label.setText("Источник для графика: нет данных")
+
+    def choose_second_file(self):
+        start_dir = str(self.current_dir) if self.current_dir else str(self._input_data_dir())
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выбрать 2-й GNSS файл",
+            start_dir,
+            "Data files (*.csv *.txt *.tsv *.xls *.xlsx *.pos);;All files (*.*)"
+        )
+        if not file_path:
+            return
+
+        self.second_file = Path(file_path)
+        self.current_dir = self.second_file.parent
+        self.second_file_edit.setText(str(self.second_file))
+        self.second_time_col_edit.clear()
+        self.second_height_col_edit.clear()
+        self.second_time_col = None
+        self.second_height_col = None
+        self.df_second = None
+        self.compare_result = None
+        self._set_status("Выбран 2-й файл. Готово к импорту.", "info")
+
+    @staticmethod
+    def _standardize_series(df: pd.DataFrame, time_col: str, height_col: str) -> pd.DataFrame:
+        out = pd.DataFrame()
+        out["utc_time"] = pd.to_datetime(df[time_col], errors="coerce", utc=True).dt.tz_localize(None)
+        out["height"] = pd.to_numeric(df[height_col], errors="coerce")
+        out = out.dropna(subset=["utc_time", "height"]).sort_values("utc_time")
+        out = out.drop_duplicates(subset=["utc_time"], keep="first").reset_index(drop=True)
+        return out
+
+    def load_second_file(self):
+        try:
+            if not self.second_file:
+                QMessageBox.warning(self, "Нет файла", "Сначала выберите 2-й файл.")
+                return
+
+            self._set_status("Импорт 2-го ряда...", "work")
+            self.log("=== Импорт 2-го ряда ===")
+
+            importer2 = DataImporter()
+            raw_table = importer2.load(str(self.second_file))
+            df_raw = raw_table.df
+
+            manual_time = self.second_time_col_edit.text().strip()
+            manual_height = self.second_height_col_edit.text().strip()
+
+            if manual_time and manual_height:
+                time_col = manual_time
+                height_col = manual_height
+            else:
+                time_col, height_col = self._auto_guess_columns(df_raw)
+                if not time_col:
+                    raise ValueError(f"Не найдена временная колонка во 2-м ряду. Столбцы: {list(df_raw.columns)}")
+                if not height_col:
+                    raise ValueError(f"Не найдена колонка высоты во 2-м ряду. Столбцы: {list(df_raw.columns)}")
+                self.second_time_col_edit.setText(time_col)
+                self.second_height_col_edit.setText(height_col)
+
+            self.second_time_col = time_col
+            self.second_height_col = height_col
+            self.df_second = self._standardize_series(df_raw, time_col, height_col)
+            self.compare_result = None
+
+            self.log_step(
+                "second_import",
+                "Второй ряд импортирован",
+                {
+                    "rows": len(self.df_second),
+                    "file": str(self.second_file),
+                    "time_col": self.second_time_col,
+                    "height_col": self.second_height_col,
+                },
+            )
+            self._sync_range_editors()
+            self.plot_layers()
+            self._set_status(f"2-й ряд загружен: {len(self.df_second)} строк.", "done")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка импорта 2-го ряда", str(e))
+            self.log_model.add_error(str(e), module="second_import")
+            self.log(f"Ошибка импорта 2-го ряда: {e}")
+            self._set_status("Ошибка импорта 2-го ряда.", "error")
 
     def _auto_guess_columns(self, df: pd.DataFrame):
         cols = list(df.columns)
@@ -674,7 +835,7 @@ class GNSSMainWindow(QMainWindow):
             self._set_status("Ошибка импорта параметров.", "error")
 
     def _get_plot_time_bounds(self):
-        candidates = [self.df_med, self.df_bw, self.df_clean, self.df_validated, self.df_raw]
+        candidates = [self.df_med, self.df_bw, self.df_clean, self.df_validated, self.df_raw, self.df_second]
         for df in candidates:
             if df is None or df.empty:
                 continue
@@ -1009,6 +1170,220 @@ class GNSSMainWindow(QMainWindow):
         self.y_mode = "absolute_m" if "Абсолютная" in self.y_mode_combo.currentText() else "mean_mm"
         self.plot_layers()
 
+    def _get_primary_series_for_compare(self):
+        selected = []
+        if self.cb_med.isChecked() and self.df_med is not None:
+            selected.append(("med", self.df_med, "height_med"))
+        if self.cb_bw.isChecked() and self.df_bw is not None:
+            selected.append(("bw", self.df_bw, "height_bw"))
+        if self.cb_clean.isChecked() and self.df_clean is not None:
+            selected.append(("clean", self.df_clean, "height"))
+        if self.cb_valid.isChecked() and self.df_validated is not None:
+            selected.append(("validated", self.df_validated, "height"))
+        if self.cb_raw.isChecked() and self.df_raw is not None:
+            selected.append(("raw", self.df_raw, "height" if "height" in self.df_raw.columns else self.height_col))
+
+        if len(selected) == 0:
+            raise ValueError("Для сравнения выберите один основной ряд чекбоксом.")
+        if len(selected) > 1:
+            raise ValueError("Для сравнения должен быть отмечен только один основной ряд.")
+
+        stage, df, y_col = selected[0]
+        time_col = "utc_time" if "utc_time" in df.columns else self.time_col
+        if not time_col or time_col not in df.columns or not y_col or y_col not in df.columns:
+            raise ValueError("Выбранный ряд нельзя использовать для сравнения.")
+        df_std = self._standardize_series(df, time_col, y_col)
+        if df_std.empty:
+            raise ValueError("Выбранный ряд пуст после приведения к utc_time/height.")
+        return stage, df_std
+
+    @staticmethod
+    def _series_stats_mm(df_std: pd.DataFrame) -> dict:
+        s = pd.to_numeric(df_std["height"], errors="coerce").dropna()
+        if len(s) == 0:
+            return {"n": 0, "mean_m": None, "std_mm": None, "amplitude_mm": None}
+        return {
+            "n": int(len(s)),
+            "mean_m": float(s.mean()),
+            "std_mm": float(s.std(ddof=1) * 1000.0) if len(s) > 1 else 0.0,
+            "amplitude_mm": float((s.max() - s.min()) * 1000.0),
+        }
+
+    @staticmethod
+    def _pearson_safe(x: pd.Series, y: pd.Series):
+        if len(x) < 2 or len(y) < 2:
+            return None
+        sx = float(pd.Series(x).std(ddof=1))
+        sy = float(pd.Series(y).std(ddof=1))
+        if sx == 0.0 or sy == 0.0:
+            return None
+        return float(pd.Series(x).corr(pd.Series(y), method="pearson"))
+
+    @staticmethod
+    def _estimate_step_seconds(df_std: pd.DataFrame) -> float:
+        if df_std is None or len(df_std) < 2:
+            return 0.0
+        dt = df_std["utc_time"].sort_values().diff().dropna().dt.total_seconds()
+        if len(dt) == 0:
+            return 0.0
+        return float(dt.median())
+
+    def compare_series(self):
+        try:
+            stage, df1 = self._get_primary_series_for_compare()
+            if df1 is None or df1.empty:
+                raise ValueError("Нет основного ряда для сравнения.")
+            if self.df_second is None or self.df_second.empty:
+                raise ValueError("Не загружен 2-й ряд для сравнения.")
+
+            self._set_status("Сравнение рядов...", "work")
+            self.log("=== Сравнение рядов ===")
+
+            df2 = self.df_second.copy()
+
+            # Приводим оба ряда к числовому времени (секунды от общего начала)
+            t1 = pd.to_datetime(df1["utc_time"], errors="coerce", utc=True)
+            h1 = pd.to_numeric(df1["height"], errors="coerce")
+            mask1 = t1.notna() & h1.notna()
+            t1 = t1[mask1].reset_index(drop=True)
+            h1 = h1[mask1].reset_index(drop=True)
+
+            t2 = pd.to_datetime(df2["utc_time"], errors="coerce", utc=True)
+            h2 = pd.to_numeric(df2["height"], errors="coerce")
+            mask2 = t2.notna() & h2.notna()
+            t2 = t2[mask2].reset_index(drop=True)
+            h2 = h2[mask2].reset_index(drop=True)
+
+            if len(t1) < 2 or len(t2) < 2:
+                raise ValueError("Недостаточно данных в одном из рядов.")
+
+            # Общий интервал перекрытия
+            t_start = max(t1.min(), t2.min())
+            t_end   = min(t1.max(), t2.max())
+            if t_start >= t_end:
+                raise ValueError("Рядки не перекрываются по времени.")
+
+            # Маска перекрытия для основного ряда
+            mask_ov = (t1 >= t_start) & (t1 <= t_end)
+            t1_ov = t1[mask_ov].reset_index(drop=True)
+            h1_ov = h1[mask_ov].reset_index(drop=True)
+
+            if len(t1_ov) < 2:
+                raise ValueError("В зоне перекрытия недостаточно точек основного ряда.")
+
+            # Интерполируем 2-й ряд (модель) на эпохи основного ряда
+            t2_sec = (t2 - t2.min()).dt.total_seconds().values
+            t1_ov_sec = (t1_ov - t2.min()).dt.total_seconds().values
+
+            interp_fn = interp1d(t2_sec, h2.values, kind="linear", bounds_error=False, fill_value=float("nan"))
+            h2_interp = pd.Series(interp_fn(t1_ov_sec))
+
+            valid = h1_ov.notna() & h2_interp.notna()
+            x = h1_ov[valid].reset_index(drop=True)
+            y = h2_interp[valid].reset_index(drop=True)
+
+            if len(x) < 2:
+                raise ValueError("После интерполяции недостаточно совпадающих точек.")
+
+            overlap_sec = (t_end - t_start).total_seconds()
+            self.log(f"Зона перекрытия: {t_start.strftime('%Y-%m-%d %H:%M:%S')} — {t_end.strftime('%Y-%m-%d %H:%M:%S')}")
+            self.log(f"Использовано пар (после интерполяции): {len(x)}, перекрытие {overlap_sec/3600:.2f} ч")
+
+            pearson_r = self._pearson_safe(x, y)
+            step_sec = self._estimate_step_seconds(pd.DataFrame({"utc_time": t1_ov[valid].reset_index(drop=True)}))
+            max_lag_epochs = max(1, min(720, len(x) // 4))
+            best_lag = 0
+            best_r = pearson_r
+
+            for k in range(-max_lag_epochs, max_lag_epochs + 1):
+                if k == 0:
+                    xx = x
+                    yy = y
+                elif k > 0:
+                    xx = x.iloc[k:].reset_index(drop=True)
+                    yy = y.iloc[:-k].reset_index(drop=True)
+                else:
+                    kk = -k
+                    xx = x.iloc[:-kk].reset_index(drop=True)
+                    yy = y.iloc[kk:].reset_index(drop=True)
+                if len(xx) < 3:
+                    continue
+                r = self._pearson_safe(xx, yy)
+                if r is None:
+                    continue
+                if best_r is None or abs(r) > abs(best_r):
+                    best_r = r
+                    best_lag = k
+
+            diff_mm = (x - y) * 1000.0
+            diff_stats = {
+                "mean_mm": float(diff_mm.mean()),
+                "median_mm": float(diff_mm.median()),
+                "std_mm": float(diff_mm.std(ddof=1)) if len(diff_mm) > 1 else 0.0,
+                "rms_mm": float((diff_mm.pow(2).mean()) ** 0.5),
+                "amplitude_mm": float(diff_mm.max() - diff_mm.min()),
+            }
+
+            s1 = self._series_stats_mm(df1)
+            s2 = self._series_stats_mm(df2)
+            best_lag_sec = float(best_lag * step_sec) if step_sec else 0.0
+            self.compare_result = {
+                "primary_stage": stage,
+                "n_overlap": int(len(x)),
+                "pearson_r": pearson_r,
+                "best_lag_epochs": int(best_lag),
+                "best_lag_sec": best_lag_sec,
+                "best_lag_min": best_lag_sec / 60.0 if step_sec else 0.0,
+                "best_lag_r": best_r,
+                "stats_1": s1,
+                "stats_2": s2,
+                "diff": diff_stats,
+            }
+
+            # Build the compact stats panel
+            cr = self.compare_result
+            panel_lines = [
+                f"Ряд 1:  {stage}   N={cr['stats_1']['n']}",
+                f"  СКО={cr['stats_1']['std_mm']:.2f} мм   амплитуда={cr['stats_1']['amplitude_mm']:.2f} мм",
+                f"Ряд 2 (интерп.):  N={cr['n_overlap']}",
+                f"  СКО={cr['stats_2']['std_mm']:.2f} мм   амплитуда={cr['stats_2']['amplitude_mm']:.2f} мм",
+                f"Пирсон r = {cr['pearson_r']:.4f}" if cr['pearson_r'] is not None else "Пирсон r = н/д",
+                f"Опт. лаг = {cr['best_lag_epochs']} эп = {cr['best_lag_sec']:.1f} с,  r(лаг) = {cr['best_lag_r']:.4f}" if cr['best_lag_r'] is not None else "",
+                f"Разн. ср={cr['diff']['mean_mm']:.2f} мм  СКО={cr['diff']['std_mm']:.2f} мм  RMS={cr['diff']['rms_mm']:.2f} мм",
+            ]
+            if hasattr(self, "compare_stats_text"):
+                self.compare_stats_text.setPlainText("\n".join(l for l in panel_lines if l))
+
+            self.log(f"Основной ряд: {stage}")
+            self.log(f"Совпавших эпох (после интерполяции): {len(x)}")
+            self.log(f"Корреляция Пирсона: {pearson_r:.4f}" if pearson_r is not None else "Корреляция Пирсона: н/д")
+            self.log(f"Оптимальный лаг: {best_lag} эпох = {best_lag_sec:.1f} с = {best_lag_sec/60.0:.2f} мин")
+            self.log(f"Корреляция на оптимальном лаге: {best_r:.4f}" if best_r is not None else "Корреляция на оптимальном лаге: н/д")
+            self.log(f"Ряд 1: N={s1['n']}, СКО={s1['std_mm']:.2f} мм, амплитуда={s1['amplitude_mm']:.2f} мм")
+            self.log(f"Ряд 2: N={s2['n']}, СКО={s2['std_mm']:.2f} мм, амплитуда={s2['amplitude_mm']:.2f} мм")
+            self.log(
+                f"Разность (1-2): ср={diff_stats['mean_mm']:.2f} мм, медиана={diff_stats['median_mm']:.2f} мм, "
+                f"СКО={diff_stats['std_mm']:.2f} мм, RMS={diff_stats['rms_mm']:.2f} мм, амплитуда={diff_stats['amplitude_mm']:.2f} мм"
+            )
+            self.log_step(
+                "compare_series",
+                "Сравнение рядов выполнено",
+                {
+                    "primary_stage": stage,
+                    "n_overlap": int(len(x)),
+                    "pearson_r": None if pearson_r is None else round(pearson_r, 6),
+                    "best_lag_epochs": int(best_lag),
+                    "best_lag_sec": round(best_lag_sec, 3),
+                    "best_lag_r": None if best_r is None else round(best_r, 6),
+                },
+            )
+            self._set_status("Сравнение рядов завершено.", "done")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка сравнения рядов", str(e))
+            self.log_model.add_error(str(e), module="compare_series")
+            self.log(f"Ошибка сравнения рядов: {e}")
+            self._set_status("Ошибка сравнения рядов.", "error")
+
     @staticmethod
     def _to_mm_relative(series: pd.Series) -> pd.Series:
         s = pd.to_numeric(series, errors="coerce")
@@ -1075,7 +1450,8 @@ class GNSSMainWindow(QMainWindow):
 
                 y_plot = self._to_mm_relative(y) if self.y_mode == "mean_mm" else y
                 self.log(f"Рисуем {label}: {t.min()} .. {t.max()} (N={len(t)})")
-                ax.plot(t, y_plot, label=label, color=color, linewidth=linewidth, alpha=alpha)
+                z = 3 if label != "2-й ряд" else 1
+                ax.plot(t, y_plot, label=label, color=color, linewidth=linewidth, alpha=alpha, zorder=z)
                 plotted = True
                 plotted_series.append((label, pd.DataFrame({"t": t, "y": y}), stats_unit))
 
@@ -1097,7 +1473,7 @@ class GNSSMainWindow(QMainWindow):
                     "#FF8C00",
                     "height" if self.df_validated is not None and "height" in self.df_validated.columns else self.height_col,
                     linewidth=1.0,
-                    alpha=0.55,
+                    alpha=0.45,
                     stats_unit="m",
                 )
 
@@ -1107,8 +1483,8 @@ class GNSSMainWindow(QMainWindow):
                     "После очистки",
                     "#D62728",
                     "height",
-                    linewidth=1.0,
-                    alpha=0.55,
+                    linewidth=0.95,
+                    alpha=0.45,
                     stats_unit="m",
                 )
 
@@ -1118,8 +1494,8 @@ class GNSSMainWindow(QMainWindow):
                     "Баттерворт",
                     "#88E788",
                     "height_bw",
-                    linewidth=1.2,
-                    alpha=0.95,
+                    linewidth=1,
+                    alpha=0.55,
                     stats_unit="m",
                 )
 
@@ -1129,10 +1505,24 @@ class GNSSMainWindow(QMainWindow):
                     "Медианный",
                     "#8A2BE2",
                     "height_med",
-                    linewidth=1.2,
-                    alpha=0.95,
+                    linewidth=1,
+                    alpha=0.55,
                     stats_unit="m",
                 )
+
+            if self.cb_second.isChecked():
+                plot_df(
+                    self.df_second,
+                    "2-й ряд",
+                    "#800080",
+                    "height",
+                    linewidth=0.9,
+                    alpha=0.50,
+                    stats_unit="m",
+                )
+                if self.df_second is not None and not self.df_second.empty and ax.lines:
+                    ax.lines[-1].set_linestyle("--")
+                    ax.lines[-1].set_zorder(1)
 
             if self.y_mode == "mean_mm":
                 ax.axhline(0.0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
@@ -1253,6 +1643,78 @@ class GNSSMainWindow(QMainWindow):
             self.log(f"Ошибка сохранения лога: {e}")
             self._set_status("Ошибка сохранения лога.", "error")
 
+    def _save_current_figure_to_path(self, out_path: Path):
+        self.canvas.fig.set_size_inches(12, 6)
+        self.canvas.fig.tight_layout()
+        self.canvas.fig.savefig(out_path, dpi=300, bbox_inches="tight")
+
+    def _set_checkboxes_for_stage(self, stage: str, include_second: bool = False):
+        mapping = {
+            "raw": self.cb_raw,
+            "validated": self.cb_valid,
+            "clean": self.cb_clean,
+            "bw": self.cb_bw,
+            "med": self.cb_med,
+        }
+        for cb in [self.cb_raw, self.cb_valid, self.cb_clean, self.cb_bw, self.cb_med]:
+            cb.blockSignals(True)
+            cb.setChecked(False)
+            cb.blockSignals(False)
+        if stage in mapping:
+            mapping[stage].blockSignals(True)
+            mapping[stage].setChecked(True)
+            mapping[stage].blockSignals(False)
+        if hasattr(self, "cb_second"):
+            self.cb_second.blockSignals(True)
+            self.cb_second.setChecked(include_second)
+            self.cb_second.blockSignals(False)
+
+    def _compose_compare_stats_text(self) -> str:
+        if self.compare_result is None:
+            return ""
+        cr = self.compare_result
+        lines = [
+            f"Основной ряд: {cr['primary_stage']}",
+            f"Совпавших эпох (после интерполяции): {cr['n_overlap']}",
+            "",
+            "Ряд 1:",
+            f"  N = {cr['stats_1']['n']}",
+            f"  СКО = {cr['stats_1']['std_mm']:.3f} мм",
+            f"  Амплитуда = {cr['stats_1']['amplitude_mm']:.3f} мм",
+            "",
+            "Ряд 2:",
+            f"  N = {cr['stats_2']['n']}",
+            f"  СКО = {cr['stats_2']['std_mm']:.3f} мм",
+            f"  Амплитуда = {cr['stats_2']['amplitude_mm']:.3f} мм",
+            "",
+            "Разность (1 - 2):",
+            f"  Среднее = {cr['diff']['mean_mm']:.3f} мм",
+            f"  Медиана = {cr['diff']['median_mm']:.3f} мм",
+            f"  СКО = {cr['diff']['std_mm']:.3f} мм",
+            f"  RMS = {cr['diff']['rms_mm']:.3f} мм",
+            f"  Амплитуда = {cr['diff']['amplitude_mm']:.3f} мм",
+            "",
+            "Корреляция:",
+            f"  Пирсон r = {cr['pearson_r']:.6f}" if cr["pearson_r"] is not None else "  Пирсон r = н/д",
+            f"  Оптимальный лаг = {cr['best_lag_epochs']} эпох",
+            f"  Оптимальный лаг = {cr['best_lag_sec']:.3f} с",
+            f"  Оптимальный лаг = {cr['best_lag_min']:.3f} мин",
+            f"  r(лаг) = {cr['best_lag_r']:.6f}" if cr["best_lag_r"] is not None else "  r(лаг) = н/д",
+            "",
+            "Параметры обработки:",
+            f"  k_sigma = {self.k_sigma_spin.value()}",
+            f"  window_sec = {self.window_sec_spin.value()}",
+            f"  min_group = {self.min_group_spin.value()}",
+            f"  max_group_epochs = {self.max_group_spin.value()}",
+            f"  bw_order = {self.order_spin.value()}",
+            f"  bw_period_min = {self.period_spin.value()}",
+            f"  median_window_points = {self.window_points_spin.value()}",
+            f"  median_threshold_mm = {self.threshold_mm_spin.value()}",
+            f"  y_mode = {self.y_mode}",
+        ]
+        return "\n".join(lines)
+
+
     def save_bundle(self):
         try:
             stage, df = self._get_display_table()
@@ -1263,13 +1725,44 @@ class GNSSMainWindow(QMainWindow):
             final_dir = self._final_export_dir()
 
             csv_path = final_dir / f"{stem}_{stage}_final.csv"
-            jpg_path = final_dir / f"{stem}_{stage}_final.jpg"
+            primary_jpg_path = final_dir / f"{stem}_{stage}_primary.jpg"
+            compare_jpg_path = None
+            compare_txt_path = None
             log_path = final_dir / f"{stem}_{stage}_processing_log.txt"
 
+            prev_states = {
+                "raw": self.cb_raw.isChecked(),
+                "validated": self.cb_valid.isChecked(),
+                "clean": self.cb_clean.isChecked(),
+                "bw": self.cb_bw.isChecked(),
+                "med": self.cb_med.isChecked(),
+                "second": self.cb_second.isChecked() if hasattr(self, "cb_second") else False,
+            }
+
             df.to_csv(csv_path, index=False, encoding="utf-8-sig")
-            self.canvas.fig.set_size_inches(12, 6)
-            self.canvas.fig.tight_layout()
-            self.canvas.fig.savefig(jpg_path, dpi=300, bbox_inches="tight")
+
+            self._set_checkboxes_for_stage(stage, include_second=False)
+            self.plot_layers()
+            self._save_current_figure_to_path(primary_jpg_path)
+
+            if self.compare_result is not None and self.df_second is not None and not self.df_second.empty:
+                compare_jpg_path = final_dir / f"{stem}_{stage}_compare.jpg"
+                self._set_checkboxes_for_stage(stage, include_second=True)
+                self.plot_layers()
+                self._save_current_figure_to_path(compare_jpg_path)
+
+                compare_txt_path = final_dir / f"{stem}_{stage}_compare_stats.txt"
+                compare_txt_path.write_text(self._compose_compare_stats_text(), encoding="utf-8")
+
+            self._set_checkboxes_for_stage("raw", include_second=False)
+            self.cb_raw.setChecked(prev_states["raw"])
+            self.cb_valid.setChecked(prev_states["validated"])
+            self.cb_clean.setChecked(prev_states["clean"])
+            self.cb_bw.setChecked(prev_states["bw"])
+            self.cb_med.setChecked(prev_states["med"])
+            if hasattr(self, "cb_second"):
+                self.cb_second.setChecked(prev_states["second"])
+            self.plot_layers()
 
             self.log_model.add(
                 module="final_export",
@@ -1278,7 +1771,9 @@ class GNSSMainWindow(QMainWindow):
                     "stage": stage,
                     "final_dir": str(final_dir),
                     "csv_path": str(csv_path),
-                    "jpg_path": str(jpg_path),
+                    "primary_jpg_path": str(primary_jpg_path),
+                    "compare_jpg_path": str(compare_jpg_path) if compare_jpg_path else None,
+                    "compare_txt_path": str(compare_txt_path) if compare_txt_path else None,
                     "log_path": str(log_path),
                     "k_sigma": self.k_sigma_spin.value(),
                     "window_sec": self.window_sec_spin.value(),
@@ -1292,6 +1787,7 @@ class GNSSMainWindow(QMainWindow):
                 },
                 level="INFO",
             )
+
             self.log_model.save(str(log_path), fmt="txt")
 
             self.log_step(
@@ -1301,20 +1797,27 @@ class GNSSMainWindow(QMainWindow):
                     "stage": stage,
                     "folder": str(final_dir),
                     "csv": str(csv_path),
-                    "jpg": str(jpg_path),
+                    "primary_jpg": str(primary_jpg_path),
+                    "compare_jpg": str(compare_jpg_path) if compare_jpg_path else "",
+                    "compare_txt": str(compare_txt_path) if compare_txt_path else "",
                     "log": str(log_path),
                 },
             )
 
-            QMessageBox.information(
-                self,
-                "Готово",
+            msg = (
                 f"Финальный комплект сохранён в папку:\n\n{final_dir}\n\n"
                 f"CSV: {csv_path.name}\n"
-                f"JPG: {jpg_path.name}\n"
-                f"LOG: {log_path.name}",
+                f"PRIMARY JPG: {primary_jpg_path.name}\n"
+                f"LOG: {log_path.name}"
             )
+            if compare_jpg_path:
+                msg += f"\nCOMPARE JPG: {compare_jpg_path.name}"
+            if compare_txt_path:
+                msg += f"\nCOMPARE TXT: {compare_txt_path.name}"
+
+            QMessageBox.information(self, "Готово", msg)
             self._set_status("Финальный комплект сохранён.", "done")
+
         except Exception as e:
             QMessageBox.critical(self, "Ошибка финального сохранения", str(e))
             self.log_model.add_error(str(e), module="final_export")

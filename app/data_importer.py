@@ -1,8 +1,8 @@
 """
-DataImporter v0.3.3
-- Единый контракт импорта для GNSS: utctime, height
+DataImporter v0.3
+- Единый контракт импорта для GNSS: utc_time, height
 - Поддержка CSV/TXT/TSV/XLS/XLSX/POS
-- Автосклейка date + time -> utctime
+- Автосклейка date + time -> utc_time
 - Детектирование системы времени и кандидатов столбцов
 - Без преобразования локального времени в UTC: это обязанность TimeValidator
 """
@@ -13,11 +13,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
-try:
-    import chardet  # type: ignore
-except ImportError:
-    chardet = None
-
+import chardet
 import pandas as pd
 
 SUPPORTED_FORMATS = [".csv", ".txt", ".tsv", ".xls", ".xlsx", ".pos"]
@@ -59,94 +55,6 @@ class ImportSchema:
     detected_height_col: str = ""
     pos_time_scale: str = "UNKNOWN"
 
-    @property
-    def timecol(self) -> str:
-        return self.time_col
-
-    @timecol.setter
-    def timecol(self, value: str) -> None:
-        self.time_col = value
-
-    @property
-    def heightcol(self) -> str:
-        return self.height_col
-
-    @heightcol.setter
-    def heightcol(self, value: str) -> None:
-        self.height_col = value
-
-    @property
-    def sourceformat(self) -> str:
-        return self.source_format
-
-    @sourceformat.setter
-    def sourceformat(self, value: str) -> None:
-        self.source_format = value
-
-    @property
-    def extracols(self) -> list[str]:
-        return self.extra_cols
-
-    @extracols.setter
-    def extracols(self, value: list[str]) -> None:
-        self.extra_cols = value
-
-    @property
-    def datecol(self) -> str:
-        return self.date_col
-
-    @datecol.setter
-    def datecol(self, value: str) -> None:
-        self.date_col = value
-
-    @property
-    def timeonlycol(self) -> str:
-        return self.time_only_col
-
-    @timeonlycol.setter
-    def timeonlycol(self, value: str) -> None:
-        self.time_only_col = value
-
-    @property
-    def timesourcekind(self) -> str:
-        return self.time_source_kind
-
-    @timesourcekind.setter
-    def timesourcekind(self, value: str) -> None:
-        self.time_source_kind = value
-
-    @property
-    def timesystem(self) -> str:
-        return self.time_system
-
-    @timesystem.setter
-    def timesystem(self, value: str) -> None:
-        self.time_system = value
-
-    @property
-    def detectedtimecol(self) -> str:
-        return self.detected_time_col
-
-    @detectedtimecol.setter
-    def detectedtimecol(self, value: str) -> None:
-        self.detected_time_col = value
-
-    @property
-    def detectedheightcol(self) -> str:
-        return self.detected_height_col
-
-    @detectedheightcol.setter
-    def detectedheightcol(self, value: str) -> None:
-        self.detected_height_col = value
-
-    @property
-    def postimescale(self) -> str:
-        return self.pos_time_scale
-
-    @postimescale.setter
-    def postimescale(self, value: str) -> None:
-        self.pos_time_scale = value
-
 
 @dataclass
 class RawTable:
@@ -158,22 +66,6 @@ class RawTable:
     n_cols: int
     column_names: list[str]
     warnings: list[str] = field(default_factory=list)
-
-    @property
-    def sourceformat(self) -> str:
-        return self.source_format
-
-    @property
-    def nrows(self) -> int:
-        return self.n_rows
-
-    @property
-    def ncols(self) -> int:
-        return self.n_cols
-
-    @property
-    def columnnames(self) -> list[str]:
-        return self.column_names
 
 
 class DataImporter:
@@ -187,10 +79,6 @@ class DataImporter:
     def raw_table(self) -> Optional[RawTable]:
         return self._raw_table
 
-    @property
-    def rawtable(self) -> Optional[RawTable]:
-        return self._raw_table
-
     def load(self, filepath: str, schema: Optional[ImportSchema] = None) -> RawTable:
         filepath = str(filepath)
         self._validate_path(filepath)
@@ -198,7 +86,6 @@ class DataImporter:
 
         self.schema = schema if schema else ImportSchema()
         self.schema.source_format = ext
-
         if ext in (".csv", ".txt", ".tsv", ".pos"):
             self.schema.encoding = self._detect_encoding(filepath)
             self.schema.separator = self._detect_separator(filepath, self.schema.encoding, ext)
@@ -224,7 +111,6 @@ class DataImporter:
         filepath = str(filepath)
         self._validate_path(filepath)
         ext = Path(filepath).suffix.lower()
-
         if ext == ".pos":
             self.schema.encoding = self._detect_encoding(filepath)
             df = self._read_pos(filepath).head(n)
@@ -236,7 +122,6 @@ class DataImporter:
             df = pd.read_excel(filepath, nrows=n, dtype=str)
         else:
             raise ValueError(f"Неподдерживаемый формат: {ext}")
-
         df.columns = [str(c).strip() for c in df.columns]
         df = self._merge_date_time_cols(df)
         return df.head(n)
@@ -246,19 +131,10 @@ class DataImporter:
             raise RuntimeError("Файл не загружен. Вызовите load() сначала.")
         return self._raw_table.column_names
 
-    def getcolumnnames(self) -> list[str]:
-        return self.get_column_names()
-
     def set_columns(self, time_col: str, height_col: str, extra_cols: Optional[list[str]] = None) -> None:
         if self._raw_table:
-            real_time = _find_col(
-                self._raw_table.df,
-                [time_col, "utctime", "utc_time", "utctimeutc", "utc_time_utc", "datetimeutc", "datetime_utc", "datetime"],
-            )
-            real_height = _find_col(
-                self._raw_table.df,
-                [height_col, "height", "height_m", "heightm", "ellipsoidal_height", "h"],
-            )
+            real_time = _find_col(self._raw_table.df, [time_col, "utc_time", "utc_time_utc", "datetime_utc"])
+            real_height = _find_col(self._raw_table.df, [height_col, "height", "height_m"])
             real_time = real_time or time_col
             real_height = real_height or height_col
         else:
@@ -277,15 +153,9 @@ class DataImporter:
                 if col not in cols:
                     raise ValueError(f"Столбец '{col}' не найден. Доступные: {cols}")
 
-    def setcolumns(self, timecol: str, heightcol: str, extracols: Optional[list[str]] = None) -> None:
-        self.set_columns(timecol, heightcol, extracols)
-
     def save_schema(self, path: str) -> None:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(asdict(self.schema), f, ensure_ascii=False, indent=2)
-
-    def saveschema(self, path: str) -> None:
-        self.save_schema(path)
 
     def load_schema(self, path: str) -> ImportSchema:
         with open(path, "r", encoding="utf-8") as f:
@@ -293,16 +163,10 @@ class DataImporter:
         self.schema = ImportSchema(**data)
         return self.schema
 
-    def loadschema(self, path: str) -> ImportSchema:
-        return self.load_schema(path)
-
     def detect_separator(self, filepath: str) -> str:
         enc = self._detect_encoding(filepath)
         ext = Path(filepath).suffix.lower()
         return self._detect_separator(filepath, enc, ext)
-
-    def detectseparator(self, filepath: str) -> str:
-        return self.detect_separator(filepath)
 
     def _validate_path(self, filepath: str) -> None:
         if not os.path.exists(filepath):
@@ -311,34 +175,21 @@ class DataImporter:
         if ext not in SUPPORTED_FORMATS:
             raise ValueError(f"Формат '{ext}' не поддерживается. Допустимые: {SUPPORTED_FORMATS}")
 
-    def validatepath(self, filepath: str) -> None:
-        self._validate_path(filepath)
-
     def _detect_encoding(self, filepath: str, sample_bytes: int = 32768) -> str:
         with open(filepath, "rb") as f:
             raw = f.read(sample_bytes)
-
-        if chardet is not None:
-            result = chardet.detect(raw)
-            enc = (result.get("encoding") or "utf-8").lower().replace("-", "_")
-        else:
-            enc = "utf-8"
-
+        result = chardet.detect(raw)
+        enc = (result.get("encoding") or "utf-8").lower().replace("-", "_")
         if enc in ("ascii", "utf_8_sig"):
             enc = "utf-8"
         return enc
 
-    def detectencoding(self, filepath: str, samplebytes: int = 32768) -> str:
-        return self._detect_encoding(filepath, samplebytes)
-
     def _detect_separator(self, filepath: str, encoding: str, ext: str = "", sample_lines: int = 10) -> str:
         if ext == ".pos":
             return r"\s+"
-
         candidates = [";", ",", "\t", " "]
         best_sep = ","
         best_score = 0
-
         try:
             with open(filepath, "r", encoding=encoding, errors="replace") as f:
                 lines = []
@@ -348,9 +199,7 @@ class DataImporter:
                     stripped = line.strip()
                     if stripped and not stripped.startswith(("%", "#", "!")):
                         lines.append(stripped)
-
             lines = lines[:sample_lines]
-
             for sep in candidates:
                 counts = [len(line.split(sep)) for line in lines if line]
                 if not counts:
@@ -363,13 +212,11 @@ class DataImporter:
                     best_sep = sep
         except Exception:
             pass
-
         return best_sep
 
     def _find_pos_header_line(self, filepath: str, encoding: str) -> tuple[int, str]:
         header_idx = 0
         pos_time_scale = "UNKNOWN"
-
         with open(filepath, "r", encoding=encoding, errors="replace") as f:
             for i, line in enumerate(f):
                 s = line.strip()
@@ -380,17 +227,13 @@ class DataImporter:
                         pos_time_scale = "GPST"
                     elif "utc" in low:
                         pos_time_scale = "UTC"
+                    # нашли первый подходящий заголовок — выходим
                     break
-
         return header_idx, pos_time_scale
-
-    def findposheaderline(self, filepath: str, encoding: str) -> tuple[int, str]:
-        return self._find_pos_header_line(filepath, encoding)
 
     def _read_file(self, filepath: str, ext: str) -> pd.DataFrame:
         if ext == ".pos":
             return self._read_pos(filepath)
-
         if ext in (".csv", ".txt", ".tsv"):
             df = pd.read_csv(
                 filepath,
@@ -405,20 +248,15 @@ class DataImporter:
             df = pd.read_excel(filepath, skiprows=self.schema.skiprows, dtype=str)
         else:
             raise ValueError(f"Неподдерживаемый формат: {ext}")
-
         df.dropna(how="all", axis=1, inplace=True)
         df.dropna(how="all", axis=0, inplace=True)
         df.reset_index(drop=True, inplace=True)
         df.columns = [str(c).strip() for c in df.columns]
         return df
 
-    def readfile(self, filepath: str, ext: str) -> pd.DataFrame:
-        return self._read_file(filepath, ext)
-
     def _read_pos(self, filepath: str) -> pd.DataFrame:
         enc = self.schema.encoding or self._detect_encoding(filepath)
         header_idx, pos_time_scale = self._find_pos_header_line(filepath, enc)
-
         self.schema.pos_time_scale = pos_time_scale
         self.schema.time_system = pos_time_scale if pos_time_scale != "UNKNOWN" else self.schema.time_system
         self.schema.time_source_kind = "pos"
@@ -432,7 +270,6 @@ class DataImporter:
             dtype=str,
             engine="python",
         )
-
         df.dropna(how="all", axis=1, inplace=True)
         df.dropna(how="all", axis=0, inplace=True)
         df.reset_index(drop=True, inplace=True)
@@ -443,72 +280,50 @@ class DataImporter:
         base_cols = [
             "date", "time", "latitude_deg", "longitude_deg", "height",
             "Q", "ns", "sdn_m", "sde_m", "sdu_m", "sdne_m", "sdeu_m", "sdun_m",
-            "age_s", "ratio",
+            "age_s", "ratio"
         ]
-
         n = df.shape[1]
         cols = base_cols[:n] + [f"extra_{i}" for i in range(max(0, n - len(base_cols)))]
         df.columns = cols[:n]
 
         if "date" in df.columns and "time" in df.columns:
-            df.insert(
-                0,
-                "utctime",
-                df["date"].astype(str).str.strip() + " " + df["time"].astype(str).str.strip(),
-            )
+            df.insert(0, "utc_time", df["date"].astype(str).str.strip() + " " + df["time"].astype(str).str.strip())
 
         return df
 
-    def readpos(self, filepath: str) -> pd.DataFrame:
-        return self._read_pos(filepath)
-
     def _merge_date_time_cols(self, df: pd.DataFrame) -> pd.DataFrame:
-        existing = _find_col(
-            df,
-            ["utctime", "utc_time", "utctimeutc", "utc_time_utc", "datetimeutc", "datetime_utc", "datetime"],
-        )
-
-        if existing and existing != "utctime":
+        existing = _find_col(df, ["utc_time", "utc_time_utc", "datetime_utc", "datetime"])
+        if existing and existing != "utc_time":
             df = df.copy()
-            df.insert(0, "utctime", df[existing].astype(str).str.strip())
+            df.insert(0, "utc_time", df[existing].astype(str).str.strip())
             self.schema.time_source_kind = "single_column"
             self.schema.detected_time_col = existing
             return df
-
-        if existing == "utctime":
+        if existing == "utc_time":
             self.schema.time_source_kind = "single_column"
-            self.schema.detected_time_col = "utctime"
+            self.schema.detected_time_col = "utc_time"
             return df
 
         date_col = _find_col(df, ["date", "дата", "date_utc", "date_local"])
         time_col = _find_col(df, ["time_local", "time_utc", "time", "время"])
-
         if date_col and time_col and date_col != time_col:
             combined = df[date_col].astype(str).str.strip() + " " + df[time_col].astype(str).str.strip()
             combined = combined.str.replace("/", "-", regex=False)
             df = df.copy()
-            df.insert(0, "utctime", combined)
+            df.insert(0, "utc_time", combined)
             self.schema.date_col = date_col
             self.schema.time_only_col = time_col
-            self.schema.detected_time_col = "utctime"
+            self.schema.detected_time_col = "utc_time"
             self.schema.time_source_kind = "date_time_split"
-
         return df
 
-    def mergedatetimecols(self, df: pd.DataFrame) -> pd.DataFrame:
-        return self._merge_date_time_cols(df)
-
     def _autodetect_core_columns(self, df: pd.DataFrame) -> None:
-        time_col = _find_col(
-            df,
-            ["utctime", "utc_time", "utctimeutc", "utc_time_utc", "datetimeutc", "datetime_utc", "datetime"],
-        )
+        time_col = _find_col(df, ["utc_time", "utc_time_utc", "datetime_utc", "datetime"])
         height_col = _find_col(df, ["height", "height_m", "heightm", "h", "ellipsoidal_height"])
 
         if time_col and not self.schema.time_col:
             self.schema.time_col = time_col
             self.schema.detected_time_col = time_col
-
         if height_col and not self.schema.height_col:
             self.schema.height_col = height_col
             self.schema.detected_height_col = height_col
@@ -517,32 +332,23 @@ class DataImporter:
             note_col = _find_col(df, ["note", "comment", "примечание"])
             if note_col:
                 notes = df[note_col].astype(str).str.upper()
-                if notes.str.contains(r"MSK\+3", regex=True).any():
+                if notes.str.contains("MSK\\+3", regex=True).any():
                     self.schema.time_system = "LOCAL_MSK+3"
                 elif notes.str.contains("UTC", regex=False).any():
                     self.schema.time_system = "UTC"
-
-        if self.schema.time_system == "UNKNOWN" and self.schema.time_source_kind == "pos":
-            self.schema.time_system = self.schema.pos_time_scale or "UNKNOWN"
-
-    def autodetectcorecolumns(self, df: pd.DataFrame) -> None:
-        self._autodetect_core_columns(df)
+            if self.schema.time_system == "UNKNOWN" and self.schema.time_source_kind == "pos":
+                self.schema.time_system = self.schema.pos_time_scale or "UNKNOWN"
 
     def _basic_checks(self, df: pd.DataFrame) -> list[str]:
         warnings = []
-
         if len(df) == 0:
             warnings.append("ПРЕДУПРЕЖДЕНИЕ: файл пустой.")
         if len(df.columns) < 2:
             warnings.append("ПРЕДУПРЕЖДЕНИЕ: найден только 1 столбец. Возможно, неверный разделитель.")
         if len(df) < 10:
             warnings.append(f"ПРЕДУПРЕЖДЕНИЕ: очень мало строк ({len(df)}). Проверьте skiprows и формат.")
-        if not _find_col(df, ["utctime", "utc_time", "utctimeutc", "utc_time_utc", "datetimeutc", "datetime_utc", "datetime"]):
+        if not _find_col(df, ["utc_time", "utc_time_utc", "datetime_utc", "datetime"]):
             warnings.append("Не найден явный столбец времени или пара date+time.")
         if not _find_col(df, ["height", "height_m", "heightm", "h", "ellipsoidal_height"]):
             warnings.append("Не найден явный столбец высоты.")
-
         return warnings
-
-    def basicchecks(self, df: pd.DataFrame) -> list[str]:
-        return self._basic_checks(df)
