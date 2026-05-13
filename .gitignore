@@ -7,10 +7,13 @@ __pycache__/
 .venv/
 venv/
 env/
+ENV/
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # Build artifacts
 packaging/build/
@@ -20,15 +23,19 @@ releases/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # PyInstaller / build artifacts
 packaging/build/
 packaging/dist/
 releases/
+*.spec.bak
 
 # Logs and temp
 *.log
+logs/
 *.tmp
+*.temp
 
 # Generated outputs
 data/output/
@@ -37,3 +44,61 @@ tests/
 __pycache__/
 *.pyc
 docs/tmp/
+
+# -----------------------------
+# Project temporary folders
+# -----------------------------
+app/gui/tmp/
+tmp/
+temp/
+
+# -----------------------------
+# Runtime outputs
+# -----------------------------
+data/output/
+output/
+reports/
+figures/
+plots/
+
+# -----------------------------
+# Local input data
+# Keep sample/demo data elsewhere if needed
+# -----------------------------
+data/input/*.csv
+data/input/*.txt
+data/input/*.tsv
+data/input/*.xls
+data/input/*.xlsx
+data/input/*.pos
+
+# Packaging / build
+build/
+dist/
+downloads/
+.eggs/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Local helper scripts in input area
+data/input/otl.py
+data/input/otl_plot.py
+
+# -----------------------------
+# Jupyter / notebooks
+# -----------------------------
+.ipynb_checkpoints/
+
+# -----------------------------
+# Test artifacts / generated docs
+# -----------------------------
+tests/*.docx
+tests/*.pdf
+
+# -----------------------------
+# Optional caches
+# -----------------------------
+.cache/
+.pytest_cache/
+.mypy_cache/
